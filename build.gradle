@@ -1,0 +1,173 @@
+/*
+ * Copyright 2022 signald contributors
+ * SPDX-License-Identifier: GPL-3.0-only
+ * See included LICENSE file
+ *
+ */
+
+
+import org.gradle.nativeplatform.platform.internal.ArchitectureInternal
+import org.gradle.nativeplatform.platform.internal.DefaultNativePlatform
+import org.gradle.nativeplatform.platform.internal.OperatingSystemInternal
+
+plugins {
+   id 'com.github.gmazzo.buildconfig' version '3.0.3'
+   id 'org.beryx.runtime' version '1.12.7'
+   id 'application'
+}
+
+compileJava.options.encoding = 'UTF-8'
+
+// crappy rust target detection
+static String getTarget() {
+    String target = System.getenv("SIGNALD_TARGET") // Allow overriding the architecture
+    if(target != null) {
+        System.out.println("skipping target detection, using " + target)
+        return target
+    }
+
+    String first = null
+    String second = null
+    String third = null
+
+    ArchitectureInternal arch = DefaultNativePlatform.getCurrentArchitecture()
+    switch(arch.getName()) {
+        case ["x86_64", "x64", "x86-64"]:  // based on https://github.com/wasmerio/wasmer-java/blob/d1fc32347b206f28ddaf48896267a9740770323e/build.gradle#L79-L82
+            first = "x86_64"
+        break
+        case "aarch64":
+            first = "aarch64"
+        break
+        case "arm-v7":
+            throw new Exception("Unsupported architecture, only 64-bit arm is supported. " +
+                                "For more info: https://gitlab.com/signald/signald/-/issues/349\n" +
+                                "To override, set environment variable SIGNALD_TARGET")
+        break
+    }
+
+    OperatingSystemInternal os = DefaultNativePlatform.getCurrentOperatingSystem()
+    if(os.isLinux()) {
+        second = "unknown-linux"
+        third = "gnu"
+    }
+
+    if(os.isMacOsX()) {
+        second = "apple"
+        third = "darwin"
+    }
+
+    if(first == null || second == null || third == null) {
+        throw new Exception("Unable to detect architecture." +
+                "\n * os: " + os.getName() +
+                "\n * arch: " + arch.getName() +
+                "\n * linux: " + os.isLinux() ? "yes" : "no" +
+                "\n * osx:" + os.isMacOsX() ? "yes": "no" +
+                "\n\n Set environment variable SIGNALD_TARGET to force a target" +
+                "\n See https://gitlab.com/signald/signald/-/merge_requests/44")
+    }
+    target = first + "-" + second + "-" + third
+    System.out.println("detected build target: " + target + " (arch=" + arch.getName() + " os=" + os.getName() +")")
+    return target
+}
+
+static String getVersion() {
+    String version = System.getenv("VERSION")
+    if(version != null) {
+        System.out.println("signald version set to " + version)
+        return version
+    }
+    System.out.println("signald version not set")
+    return "unversioned"
+}
+
+repositories {
+    maven {url "https://gitlab.com/api/v4/groups/6853927/-/packages/maven"} // https://gitlab.com/groups/signald/-/packages
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.signald:signal-service-java-' + getTarget() + ':2.15.3_unofficial_65'
+    implementation 'org.bouncycastle:bcprov-jdk15on:1.70'
+    implementation 'com.kohlschutter.junixsocket:junixsocket-common:2.6.1'
+    implementation 'com.kohlschutter.junixsocket:junixsocket-native-common:2.6.1'
+    implementation 'org.apache.logging.log4j:log4j-api:2.19.0'
+    implementation 'org.apache.logging.log4j:log4j-core:2.19.0'
+    implementation 'org.slf4j:slf4j-nop:2.0.5'
+    implementation 'info.picocli:picocli:4.7.0'
+    implementation 'org.xerial:sqlite-jdbc:3.40.0.0'
+    implementation 'org.postgresql:postgresql:42.5.1'
+    implementation 'org.flywaydb:flyway-core:9.10.2'
+    implementation 'com.google.protobuf:protobuf-javalite:3.21.11'
+    implementation 'io.prometheus:simpleclient:0.16.0'
+    implementation 'io.prometheus:simpleclient_hotspot:0.16.0'
+    implementation 'io.prometheus:simpleclient_httpserver:0.16.0'
+    implementation 'com.squareup.okhttp3:logging-interceptor:4.10.0'
+    implementation 'io.sentry:sentry:6.11.0'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.9.0'
+}
+
+
+buildConfig {
+  packageName("io.finn.signald")
+
+  buildConfigField('String', 'NAME', "\"signald\"")
+  buildConfigField('String', 'VERSION', "\"" + getVersion() + "\"")
+  buildConfigField('String', "ERROR_REPORTING_URL", "\"https://gitlab.com/signald/signald/-/issues/new\"")
+
+  buildConfigField('String', 'BRANCH', "\"" + (System.getenv("CI_BUILD_REF_NAME") ?: "") + "\"")
+  buildConfigField('String', 'COMMIT', "\"" + (System.getenv("CI_COMMIT_SHA") ?: "") + "\"")
+
+  buildConfigField('String', 'USER_AGENT', System.getenv("USER_AGENT") ? "\"" + System.getenv("USER_AGENT") + "\"" : "NAME + \"/\" + VERSION")
+  buildConfigField('String', 'SIGNAL_AGENT', System.getenv("SIGNAL_AGENT") ? "\"" + System.getenv("SIGNAL_AGENT") + "\"" : "NAME")
+
+  // Parameters for the default server to provision new accounts with, if not specified in the protocol.
+  // the server UUID is internal to signald, must be changed if any other server values are changed.
+  buildConfigField('String', "DEFAULT_SERVER_UUID", "\"" + (System.getenv("DEFAULT_SERVER_UUID") ?: "4472854d-ca8c-480b-95dd-d93d1813a076") + "\"")
+  buildConfigField('String', 'SIGNAL_URL', "\"" + (System.getenv("SIGNAL_URL") ?: "https://messenger.yucall.me") + "\"")
+  buildConfigField('String', 'SIGNAL_CDN_URL', "\"" + (System.getenv("SIGNAL_CDN_URL") ?: "https://cdn.yucall.me") + "\"")
+  buildConfigField('String', 'SIGNAL_CDN2_URL', "\"" + (System.getenv("SIGNAL_CDN_URL") ?: "https://cdn.yucall.me") + "\"")
+  buildConfigField('String', 'SIGNAL_KEY_BACKUP_URL', "\"" + (System.getenv("SIGNAL_KEY_BACKUP_URL") ?: "https://backup.yucall.me") + "\"")
+  buildConfigField('String', 'SIGNAL_STORAGE_URL', "\"" + (System.getenv("SIGNAL_STORAGE_URL") ?: "https://storage.yucall.me") + "\"")
+  buildConfigField('String', 'SIGNAL_CONTACT_DISCOVERY_URL', "\"" + (System.getenv("SIGNAL_CONTACT_DISCOVERY_URL") ?: "https://cdsone.yucall.me") + "\"")
+  buildConfigField('String', "UNIDENTIFIED_SENDER_TRUST_ROOT", "\"" + (System.getenv("SIGNAL_UNIDENTIFIED_SENDER_ROOT") ?: "BYByQXkFLluhiqvjs07ft8R0C03rpT5r6055hP+E8XN9") + "\"")
+  buildConfigField('String', "SIGNAL_ZK_GROUP_SERVER_PUBLIC_PARAMS", "\"" + (System.getenv("SIGNAL_ZK_GROUP_SERVER_PUBLIC_PARAMS") ?: "ANbpBUQxdlcoKYj30uskDsWkz0uPuBFsgvVKDN/7DDwiqtptKitzcFB0Xq0L/MWotvrdgBdd3TZoGQgrJA1rRXOMpAl8U9lUSDU78tqVoqo/c/CrfmSBXyrrdPuXkBezE4qrT62L2bV9hy/Y7ySh4fr8r5uc9UOMKttBawgzglZjkjsY4Mptj+l2A50aofKFSqY83dtrotFLJFeLWATjUyCCjjM9/KJsG0oXmIrhffcgDFKI1gvcQOopmTjl+cUPHSCxFz2gglAEhkV3lu1c7iFXu6ANsH6fZJz7FPChnH91/KevvoMAyIrrjpzApthT0+CRN4gY9W7e9qTZxDjegCs0hC7NeMgqWJnSl0LjjI7K7GT9pObBTg4O0GRqt4iuBqrvcZVzPh1Pd7FB7fnJfTpsiroMDDl58ZH7qyjnbwRlqjA2OQnTs57Ig0iVcDTaJZqpEXrm/+5h+qdYJBEdZkckMhr8b8WVlYH2xksAQb+KnvMJa4zS09NGSQ5cCfD/CM4kNP6ZtISZTtR4AvIzYTT5asWV1MXc7rOYvkCHI/8N") + "\"")
+  // the base64 encoded trust store
+  buildConfigField('String', "CA", "\"" + (System.getenv("SIGNAL_CA") ?: "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") + "\"")
+  // proxy should be specified in host:port form
+  buildConfigField('String', "SIGNAL_PROXY", "\"" + (System.getenv("SIGNAL_PROXY") ?: "") + "\"")
+
+  buildConfigField('String', "KEY_BACKUP_SERVICE_NAME", "\"" + (System.getenv("KEY_BACKUP_SERVICE_NAME") ?: "fe7c1bfae98f9b073d220366ea31163ee82f6d04bead774f71ca8e5c40847bfe") + "\"")
+  buildConfigField('String', "KEY_BACKUP_SERVICE_ID", "\"" + (System.getenv("KEY_BACKUP_SERVICE_ID") ?: "DO26A1NbQbZ3Kc6ZJBhfgx13Z5KKHRaJrLaJvAecN18=") + "\"")
+  buildConfigField('String', "KEY_BACKUP_MRENCLAVE", "\"" + (System.getenv("KEY_BACKUP_MRENCLAVE") ?: "ee19f1965b1eefa3dc4204eb70c04f397755f771b8c1909d080c04dad2a6a9ba") + "\"")
+  buildConfigField('String', "CDS_MRENCLAVE", "\"" + (System.getenv("CDS_MRENCLAVE") ?: "a3bfdf9717e35ce4f6fd3888133d65a71a880cd6a26c41d1e47647ed3e7704fa") + "\"")
+  buildConfigField('String', "CDS_CA", "\"" + (System.getenv("CDS_CA") ?: "AAAAAgAAABQeE5h3wTEjUgA1bUjXQbnoU41KKQAAB4EBAANpYXMAAAFkret5dgAAAAAABVguNTA5AAAFTzCCBUswggOzoAMCAQICCQDRB3ZdMqOwlDANBgkqhkiG9w0BAQsFADB+MQswCQYDVQQGEwJVUzELMAkGA1UECAwCQ0ExFDASBgNVBAcMC1NhbnRhIENsYXJhMRowGAYDVQQKDBFJbnRlbCBDb3Jwb3JhdGlvbjEwMC4GA1UEAwwnSW50ZWwgU0dYIEF0dGVzdGF0aW9uIFJlcG9ydCBTaWduaW5nIENBMCAXDTE2MTExNDE1MzczMVoYDzIwNDkxMjMxMjM1OTU5WjB+MQswCQYDVQQGEwJVUzELMAkGA1UECAwCQ0ExFDASBgNVBAcMC1NhbnRhIENsYXJhMRowGAYDVQQKDBFJbnRlbCBDb3Jwb3JhdGlvbjEwMC4GA1UEAwwnSW50ZWwgU0dYIEF0dGVzdGF0aW9uIFJlcG9ydCBTaWduaW5nIENBMIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAnzxkfrV3PLtRLScywNdBXrtVoPqe3i5kkZnmgh25ENUxdzcJd0Zqal5HhszS3evUFJ1qL2MlUp3RDMmHN7B3nBoH4pxHoa4ASUhHbEifRaWhXXrI7MasxkWttD2HZ531nAk7xaLpaWxUeFQbl551S1c5FL5V0y/0wJ3fJyGZNM2ZBSez+S7Xj78pJGq+y3EkDvOcLXEHtEdUWn/7EOsGCmiphYAhnjaRCVJoOJLWpeKoCAMZPkB1MUBONrMVYjeZqoJQdECXVKLf6PWv1f5jHh/CrzgIkG8op5DZ3Z/gYJObEleQxYBdA331aplTG5bead4z7SJswSB9EEK1yat/QE/HEcD+R2n7lXix3A7EaeoaJeD/mRSIbvJpmyNbtIR91v9AtgbmFweTwvuYsxRYf5z9JXNi3+qxCzvS2XZzoaS9RMRTqvR/wfLT0POE90oG+JwInw2mzbf87ujJghqOVPJcBBbRjEaDml+AEvvdPcdNJWJ5rcLA1Vr/bwYiQl0bAgMBAAGjgckwgcYwYAYDVR0fBFkwVzBVoFOgUYZPaHR0cDovL3RydXN0ZWRzZXJ2aWNlcy5pbnRlbC5jb20vY29udGVudC9DUkwvU0dYL0F0dGVzdGF0aW9uUmVwb3J0U2lnbmluZ0NBLmNybDAdBgNVHQ4EFgQUeEN7dqZ+vNCvfkI36zV8O4cBUTwwHwYDVR0jBBgwFoAUeEN7dqZ+vNCvfkI36zV8O4cBUTwwDgYDVR0PAQH/BAQDAgEGMBIGA1UdEwEB/wQIMAYBAf8CAQAwDQYJKoZIhvcNAQELBQADggGBAHhfLWDFyAr0Knl2ECE5FdqCybKeieCQKiWmx1sWCRxoqyBKrnEYiUksfh4yCRFFWo/BNEIxLnemOZTZl5XI6kV2gjzqitHhkc+oYvq4qTLT2bBTWgcC0FVfdOUg4wMw8zSA563J18geIHAxQr8AxSioC0Yzgf1gKoLHA1KBquWVYsy1M06okD5lCwEGgfXOjrYurJxBSYgkOuyS8lvxPN/368wpjuUbulo1OLZrJsvEWlHeADytMGUxrXz11O8PiAXRuRM9JBNas8RkGi+ICDSdczMpXg527kvFInIyYo76gNedkqtOPREg8/ta0RnNjVRKodSmhl5rV76sV3Ewfi48uQcNpHtL/Ihp4BQT6gk1Qd6KeSgRt0Y2xekUUs8M7lny+0BKzQvFhMucg1QEc0wOfsZgXN/PL/Q5ttRxn3AvDgw/oE/bEqbLKtGrHJrx+PTDoI7dcqMrC7XQrSVv/RWaaDsqWh8dEfpiUy8D11TK7w2lc1oeWohMfonZEhjJ1wCFFeX1mSzMRx87G8Gq7CSimX5q0w==") + "\"" )
+  buildConfigField('int',    "SENDER_KEY_MAX_AGE_DAYS", System.getenv("SENDER_KEY_MAX_AGE_DAYS") ?: "14")
+}
+
+
+application {
+    mainClass = 'io.finn.signald.Main'
+}
+
+test {
+    useJUnitPlatform()
+    afterTest { desc, result ->
+        logger.quiet "Test ${desc.name} [${desc.className}]: ${result.resultType}"
+    }
+}
+
+
+allprojects {
+    gradle.projectsEvaluated {
+        tasks.withType(JavaCompile) {
+            options.compilerArgs << "-Xlint:cast" << "-Xlint:deprecation" << "-Xlint:divzero" << "-Xlint:empty"
+            options.compilerArgs << "-Xlint:fallthrough" << "-Xlint:finally" << "-Xlint:overrides" << "-Xlint:path"
+            options.compilerArgs << "-Xlint:unchecked"
+        }
+    }
+}
+
+runtime {
+    options = ['--strip-java-debug-attributes', '--compress', '2', '--no-header-files', '--no-man-pages']
+    modules = ['java.base', 'java.management', 'java.naming', 'java.sql', 'java.xml', 'jdk.crypto.ec', 'jdk.httpserver', 'java.desktop', 'jdk.unsupported']
+}
