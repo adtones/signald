@@ -82,7 +82,7 @@ public class ProvisioningManager {
   public URI getDeviceLinkUri() throws TimeoutException, IOException, URISyntaxException {
     String deviceUuid = accountManager.getNewDeviceUuid();
     String deviceKey = Base64.encodeBytesWithoutPadding(identityKey.getPublicKey().getPublicKey().serialize());
-    return new URI("sgnl://linkdevice?uuid=" + URLEncoder.encode(deviceUuid, StandardCharsets.UTF_8) + "&pub_key=" + URLEncoder.encode(deviceKey, StandardCharsets.UTF_8));
+    return new URI("yucall://linkdevice?uuid=" + URLEncoder.encode(deviceUuid, StandardCharsets.UTF_8) + "&pub_key=" + URLEncoder.encode(deviceKey, StandardCharsets.UTF_8));
   }
 
   public void waitForScan() throws IOException, TimeoutException { newDeviceRegistration = accountManager.getNewDeviceRegistration(identityKey); }

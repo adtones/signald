@@ -28,7 +28,7 @@ import org.signal.libsignal.zkgroup.InvalidInputException;
 public class AddLinkedDeviceRequest implements RequestType<Empty> {
   @ExampleValue(ExampleValue.LOCAL_UUID) @Doc("The account to interact with") @Required public String account;
 
-  @ExampleValue(ExampleValue.LINKING_URI) @Doc("the sgnl://linkdevice uri provided (typically in qr code form) by the new device") @Required public String uri;
+  @ExampleValue(ExampleValue.LINKING_URI) @Doc("the yucall://linkdevice uri provided (typically in qr code form) by the new device") @Required public String uri;
 
   @Override
   public Empty run(Request request)

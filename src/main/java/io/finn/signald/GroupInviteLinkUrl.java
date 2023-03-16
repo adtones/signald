@@ -80,7 +80,7 @@ public final class GroupInviteLinkUrl {
     try {
       URI url = new URI(urlString);
 
-      if (!"https".equalsIgnoreCase(url.getScheme()) && !"sgnl".equalsIgnoreCase(url.getScheme())) {
+      if (!"https".equalsIgnoreCase(url.getScheme()) && !"yucall".equalsIgnoreCase(url.getScheme())) {
         return null;
       }
 
